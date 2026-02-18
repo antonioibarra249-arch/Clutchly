@@ -56,7 +56,7 @@ export async function POST(request: Request) {
     }
 
     // Format champion pool for AI
-    const championData = user.championPool.map((c) => ({
+    const championData = user.championPool.map((c: any) => ({
       name: c.championName,
       games: c.gamesPlayed,
       wins: c.wins,
