@@ -14,45 +14,39 @@ export async function POST(req: NextRequest) {
       );
     }
 
-    // Look up the user
-    const user = await prisma.user.findUnique({
-      where: { id: userId },
-    });
-
-    if (!user) {
-      return NextResponse.json(
-        { error: "User not found" },
-        { status: 404 }
-      );
-    }
-
-    // If user already has a Stripe customer ID, reuse it
-    let customerId = user.stripeCustomerId;
-
-    if (!customerId) {
-      // Create a new Stripe customer
-      const customer = await stripe.customers.create({
-        email: user.email ?? undefined,
-        metadata: {
-          clutchly_user_id: user.id,
-          riot_name: user.riotName ?? "",
-          riot_tag: user.riotTag ?? "",
-        },
-      });
-      customerId = customer.id;
-
-      // Save the Stripe customer ID
-      await prisma.user.update({
-        where: { id: user.id },
-        data: { stripeCustomerId: customerId },
-      });
-    }
-
-    // Create checkout session
     const appUrl = process.env.NEXT_PUBLIC_APP_URL || "http://localhost:3000";
 
-    const session = await stripe.checkout.sessions.create({
-      customer: customerId,
+    // Try to find user in database
+    const user = await prisma.user.findUnique({
+      where: { id: userId },
+    }).catch(() => null);
+
+    let customerId: string | undefined;
+
+    if (user) {
+      // Existing user — reuse or create Stripe customer
+      customerId = user.stripeCustomerId ?? undefined;
+
+      if (!customerId) {
+        const customer = await stripe.customers.create({
+          email: user.email ?? undefined,
+          metadata: {
+            clutchly_user_id: user.id,
+            riot_name: user.riotName ?? "",
+            riot_tag: user.riotTag ?? "",
+          },
+        });
+        customerId = customer.id;
+
+        await prisma.user.update({
+          where: { id: user.id },
+          data: { stripeCustomerId: customerId },
+        });
+      }
+    }
+
+    // Create checkout session (works with or without a DB user)
+    const sessionParams: Parameters<typeof stripe.checkout.sessions.create>[0] = {
       mode: "subscription",
       payment_method_types: ["card"],
       line_items: [
@@ -64,14 +58,20 @@ export async function POST(req: NextRequest) {
       success_url: `${appUrl}/home?upgraded=true`,
       cancel_url: `${appUrl}/home?cancelled=true`,
       metadata: {
-        clutchly_user_id: user.id,
+        clutchly_user_id: userId,
       },
       subscription_data: {
         metadata: {
-          clutchly_user_id: user.id,
+          clutchly_user_id: userId,
         },
       },
-    });
+    };
+
+    if (customerId) {
+      sessionParams.customer = customerId;
+    }
+
+    const session = await stripe.checkout.sessions.create(sessionParams);
 
     return NextResponse.json({ url: session.url });
   } catch (error) {
