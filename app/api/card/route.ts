@@ -16,7 +16,6 @@ export async function POST(request: Request) {
 
     const today = getTodayDate();
 
-    // Check for cached card from today
     const existingCard = await prisma.dailyCard.findUnique({
       where: {
         userId_date: {
@@ -30,7 +29,6 @@ export async function POST(request: Request) {
       return NextResponse.json({ data: existingCard });
     }
 
-    // Get user with champion pool
     const user = await prisma.user.findUnique({
       where: { id: userId },
       include: {
@@ -55,7 +53,6 @@ export async function POST(request: Request) {
       );
     }
 
-    // Format champion pool for AI
     const championData = user.championPool.map((c: any) => ({
       name: c.championName,
       games: c.gamesPlayed,
@@ -67,7 +64,6 @@ export async function POST(request: Request) {
     let cardData;
 
     try {
-      // Generate card with AI
       cardData = await generateDailyCard(
         championData,
         user.rank || "Gold",
@@ -79,7 +75,6 @@ export async function POST(request: Request) {
       cardData = generateFallbackCard(championData);
     }
 
-    // Save the card
     const savedCard = await prisma.dailyCard.create({
       data: {
         userId,
@@ -88,7 +83,7 @@ export async function POST(request: Request) {
         avoid: cardData.avoid as any,
         ban: cardData.ban as any,
         build: cardData.build as any,
-        patchVersion: "14.3", // TODO: Fetch current patch
+        patchVersion: "14.3",
       },
     });
 
