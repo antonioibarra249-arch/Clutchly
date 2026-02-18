@@ -1,0 +1,99 @@
+// Clutchly Database Schema
+// Run: npx prisma db push (development)
+// Run: npx prisma migrate dev (production)
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+model User {
+  id                   String    @id @default(cuid())
+  email                String?   @unique
+  riotPuuid            String?   @unique @map("riot_puuid")
+  riotName             String?   @map("riot_name")
+  riotTag              String?   @map("riot_tag")
+  region               String    @default("na1")
+  rank                 String?
+  role                 String?
+  subscriptionTier     String    @default("free") @map("subscription_tier")
+  stripeCustomerId     String?   @map("stripe_customer_id")
+  stripeSubscriptionId String?   @map("stripe_subscription_id")
+  lastSyncAt           DateTime? @map("last_sync_at")
+  createdAt            DateTime  @default(now()) @map("created_at")
+  updatedAt            DateTime  @updatedAt @map("updated_at")
+
+  championPool ChampionPool[]
+  dailyCards   DailyCard[]
+  feedback     Feedback[]
+
+  @@index([riotPuuid])
+  @@map("users")
+}
+
+model ChampionPool {
+  id           String    @id @default(cuid())
+  userId       String    @map("user_id")
+  championId   Int       @map("champion_id")
+  championName String    @map("champion_name")
+  gamesPlayed  Int       @default(0) @map("games_played")
+  wins         Int       @default(0)
+  losses       Int       @default(0)
+  winRate      Float?    @map("win_rate")
+  avgKDA       Float?    @map("avg_kda")
+  isMain       Boolean   @default(false) @map("is_main")
+  lastPlayed   DateTime? @map("last_played")
+  createdAt    DateTime  @default(now()) @map("created_at")
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, championId])
+  @@index([userId])
+  @@map("champion_pool")
+}
+
+model DailyCard {
+  id           String   @id @default(cuid())
+  userId       String   @map("user_id")
+  date         DateTime @db.Date
+  picks        Json
+  avoid        Json?
+  ban          Json?
+  build        Json?
+  patchVersion String?  @map("patch_version")
+  generatedAt  DateTime @default(now()) @map("generated_at")
+
+  user     User       @relation(fields: [userId], references: [id], onDelete: Cascade)
+  feedback Feedback[]
+
+  @@unique([userId, date])
+  @@index([userId, date])
+  @@map("daily_cards")
+}
+
+model Feedback {
+  id        String   @id @default(cuid())
+  userId    String   @map("user_id")
+  cardId    String   @map("card_id")
+  rating    String?
+  comment   String?
+  createdAt DateTime @default(now()) @map("created_at")
+
+  user User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  card DailyCard @relation(fields: [cardId], references: [id], onDelete: Cascade)
+
+  @@map("feedback")
+}
+
+model WaitlistEmail {
+  id        String   @id @default(cuid())
+  email     String   @unique
+  source    String?
+  createdAt DateTime @default(now()) @map("created_at")
+
+  @@map("waitlist_emails")
+}
