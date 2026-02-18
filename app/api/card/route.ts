@@ -84,10 +84,10 @@ export async function POST(request: Request) {
       data: {
         userId,
         date: new Date(today),
-        picks: cardData.picks,
-        avoid: cardData.avoid,
-        ban: cardData.ban,
-        build: cardData.build,
+        picks: cardData.picks as any,
+        avoid: cardData.avoid as any,
+        ban: cardData.ban as any,
+        build: cardData.build as any,
         patchVersion: "14.3", // TODO: Fetch current patch
       },
     });
