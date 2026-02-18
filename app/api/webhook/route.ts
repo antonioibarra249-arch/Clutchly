@@ -40,15 +40,26 @@ export async function POST(req: NextRequest) {
         const userId = session.metadata?.clutchly_user_id;
 
         if (userId && session.subscription) {
-          await prisma.user.update({
+          // Check if user exists before updating
+          const user = await prisma.user.findUnique({
             where: { id: userId },
-            data: {
-              subscriptionTier: "pro",
-              stripeCustomerId: session.customer as string,
-              stripeSubscriptionId: session.subscription as string,
-            },
           });
-          console.log(`[WEBHOOK] User ${userId} upgraded to Pro`);
+
+          if (user) {
+            await prisma.user.update({
+              where: { id: userId },
+              data: {
+                subscriptionTier: "pro",
+                stripeCustomerId: session.customer as string,
+                stripeSubscriptionId: session.subscription as string,
+              },
+            });
+            console.log(`[WEBHOOK] User ${userId} upgraded to Pro`);
+          } else {
+            console.log(`[WEBHOOK] User ${userId} not found in DB — skipping upgrade. Will reconcile when user is created.`);
+          }
+        } else {
+          console.log("[WEBHOOK] checkout.session.completed — missing userId or subscription in metadata");
         }
         break;
       }
@@ -58,20 +69,26 @@ export async function POST(req: NextRequest) {
         const userId = subscription.metadata?.clutchly_user_id;
 
         if (userId) {
-          const isActive =
-            subscription.status === "active" ||
-            subscription.status === "trialing";
-
-          await prisma.user.update({
+          const user = await prisma.user.findUnique({
             where: { id: userId },
-            data: {
-              subscriptionTier: isActive ? "pro" : "free",
-              stripeSubscriptionId: subscription.id,
-            },
           });
-          console.log(
-            `[WEBHOOK] Subscription updated for ${userId}: ${subscription.status}`
-          );
+
+          if (user) {
+            const isActive =
+              subscription.status === "active" ||
+              subscription.status === "trialing";
+
+            await prisma.user.update({
+              where: { id: userId },
+              data: {
+                subscriptionTier: isActive ? "pro" : "free",
+                stripeSubscriptionId: subscription.id,
+              },
+            });
+            console.log(`[WEBHOOK] Subscription updated for ${userId}: ${subscription.status}`);
+          } else {
+            console.log(`[WEBHOOK] User ${userId} not found — skipping subscription update`);
+          }
         }
         break;
       }
@@ -81,14 +98,22 @@ export async function POST(req: NextRequest) {
         const userId = subscription.metadata?.clutchly_user_id;
 
         if (userId) {
-          await prisma.user.update({
+          const user = await prisma.user.findUnique({
             where: { id: userId },
-            data: {
-              subscriptionTier: "free",
-              stripeSubscriptionId: null,
-            },
           });
-          console.log(`[WEBHOOK] User ${userId} subscription cancelled`);
+
+          if (user) {
+            await prisma.user.update({
+              where: { id: userId },
+              data: {
+                subscriptionTier: "free",
+                stripeSubscriptionId: null,
+              },
+            });
+            console.log(`[WEBHOOK] User ${userId} subscription cancelled`);
+          } else {
+            console.log(`[WEBHOOK] User ${userId} not found — skipping cancellation`);
+          }
         }
         break;
       }
@@ -103,7 +128,6 @@ export async function POST(req: NextRequest) {
 
           if (userId) {
             console.log(`[WEBHOOK] Payment failed for user ${userId}`);
-            // Optionally downgrade or notify — Stripe will retry automatically
           }
         }
         break;
