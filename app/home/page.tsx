@@ -97,7 +97,24 @@ export default function HomePage() {
   };
 
   const handleUpgrade = async () => {
-    alert("In production, this would redirect to Stripe checkout!");
+    try {
+      const res = await fetch("/api/checkout", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ userId: user.id }),
+      });
+
+      const data = await res.json();
+
+      if (data.url) {
+        window.location.href = data.url;
+      } else {
+        alert(data.error || "Something went wrong. Please try again.");
+      }
+    } catch (err) {
+      console.error("Checkout error:", err);
+      alert("Failed to start checkout. Please try again.");
+    }
   };
 
   return (
