@@ -17,37 +17,41 @@ export async function POST(req: NextRequest) {
     const appUrl = process.env.NEXT_PUBLIC_APP_URL || "http://localhost:3000";
 
     // Try to find user in database
-    const user = await prisma.user.findUnique({
-      where: { id: userId },
-    }).catch(() => null);
-
     let customerId: string | undefined;
 
-    if (user) {
-      // Existing user — reuse or create Stripe customer
-      customerId = user.stripeCustomerId ?? undefined;
+    try {
+      const user = await prisma.user.findUnique({
+        where: { id: userId },
+      });
 
-      if (!customerId) {
-        const customer = await stripe.customers.create({
-          email: user.email ?? undefined,
-          metadata: {
-            clutchly_user_id: user.id,
-            riot_name: user.riotName ?? "",
-            riot_tag: user.riotTag ?? "",
-          },
-        });
-        customerId = customer.id;
+      if (user) {
+        customerId = user.stripeCustomerId ?? undefined;
 
-        await prisma.user.update({
-          where: { id: user.id },
-          data: { stripeCustomerId: customerId },
-        });
+        if (!customerId) {
+          const customer = await stripe.customers.create({
+            email: user.email ?? undefined,
+            metadata: {
+              clutchly_user_id: user.id,
+              riot_name: user.riotName ?? "",
+              riot_tag: user.riotTag ?? "",
+            },
+          });
+          customerId = customer.id;
+
+          await prisma.user.update({
+            where: { id: user.id },
+            data: { stripeCustomerId: customerId },
+          });
+        }
       }
+    } catch {
+      // User not in DB yet — continue without customer ID
     }
 
-    // Create checkout session (works with or without a DB user)
-    const sessionParams: Parameters<typeof stripe.checkout.sessions.create>[0] = {
-      mode: "subscription",
+    // Create checkout session
+    const session = await stripe.checkout.sessions.create({
+      ...(customerId ? { customer: customerId } : {}),
+      mode: "subscription" as const,
       payment_method_types: ["card"],
       line_items: [
         {
@@ -65,13 +69,7 @@ export async function POST(req: NextRequest) {
           clutchly_user_id: userId,
         },
       },
-    };
-
-    if (customerId) {
-      sessionParams.customer = customerId;
-    }
-
-    const session = await stripe.checkout.sessions.create(sessionParams);
+    });
 
     return NextResponse.json({ url: session.url });
   } catch (error) {
