@@ -2,23 +2,54 @@
 
 import { useState } from "react";
 import Link from "next/link";
-import { ArrowLeft, ExternalLink } from "lucide-react";
+import { useRouter } from "next/navigation";
+import { ArrowLeft, Mail, Lock, Eye, EyeOff } from "lucide-react";
 
 export default function LoginPage() {
+  const router = useRouter();
   const [loading, setLoading] = useState(false);
-  const [riotId, setRiotId] = useState("");
+  const [email, setEmail] = useState("");
+  const [password, setPassword] = useState("");
+  const [showPassword, setShowPassword] = useState(false);
+  const [error, setError] = useState("");
+  const [mode, setMode] = useState<"signin" | "signup">("signin");
+  const [success, setSuccess] = useState("");
 
-  const handleRiotLogin = async () => {
+  const handleSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setError("");
+    setSuccess("");
     setLoading(true);
-    // In production, redirect to Riot OAuth
-    setTimeout(() => {
-      window.location.href = "/home";
-    }, 1500);
-  };
 
-  const handleDemoLogin = () => {
-    // Skip OAuth for demo/development
-    window.location.href = "/home";
+    try {
+      const endpoint = mode === "signin" ? "/api/auth/signin" : "/api/auth/signup";
+
+      const res = await fetch(endpoint, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ email, password }),
+      });
+
+      const data = await res.json();
+
+      if (!res.ok) {
+        setError(data.error || "Something went wrong");
+        return;
+      }
+
+      if (mode === "signup") {
+        setSuccess("Account created! You can now sign in.");
+        setMode("signin");
+        setPassword("");
+      } else {
+        router.push("/home");
+        router.refresh();
+      }
+    } catch (err) {
+      setError("Something went wrong. Please try again.");
+    } finally {
+      setLoading(false);
+    }
   };
 
   return (
@@ -53,91 +84,120 @@ export default function LoginPage() {
             </div>
           </div>
 
-          <h1 className="text-2xl font-bold mb-2">Connect your account</h1>
+          <h1 className="text-2xl font-bold mb-2">
+            {mode === "signin" ? "Welcome back" : "Create your account"}
+          </h1>
           <p className="text-gray-400 mb-8">
-            Link your Riot account to get personalized recommendations based on
-            your match history.
+            {mode === "signin"
+              ? "Sign in to see your daily card."
+              : "Sign up to get personalized recommendations."}
           </p>
 
-          {/* Riot Sign In Button */}
-          <button
-            onClick={handleRiotLogin}
-            disabled={loading}
-            className="w-full py-4 bg-[#D0021B] hover:bg-[#B8011A] rounded-xl font-bold text-lg transition-all flex items-center justify-center gap-3 disabled:opacity-50"
-          >
-            {loading ? (
+          {/* Error / Success Messages */}
+          {error && (
+            <div className="mb-4 p-3 bg-red-500/20 border border-red-500/30 rounded-xl text-red-400 text-sm">
+              {error}
+            </div>
+          )}
+          {success && (
+            <div className="mb-4 p-3 bg-emerald-500/20 border border-emerald-500/30 rounded-xl text-emerald-400 text-sm">
+              {success}
+            </div>
+          )}
+
+          {/* Form */}
+          <form onSubmit={handleSubmit} className="space-y-4">
+            <div>
+              <label className="block text-sm text-gray-400 mb-2">Email</label>
+              <div className="relative">
+                <Mail className="absolute left-4 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-500" />
+                <input
+                  type="email"
+                  value={email}
+                  onChange={(e) => setEmail(e.target.value)}
+                  placeholder="you@example.com"
+                  required
+                  className="w-full pl-11 pr-4 py-3 bg-white/5 border border-white/10 rounded-xl text-white placeholder-gray-500 focus:outline-none focus:border-orange-500/50 focus:bg-white/10 transition-all"
+                />
+              </div>
+            </div>
+
+            <div>
+              <label className="block text-sm text-gray-400 mb-2">Password</label>
+              <div className="relative">
+                <Lock className="absolute left-4 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-500" />
+                <input
+                  type={showPassword ? "text" : "password"}
+                  value={password}
+                  onChange={(e) => setPassword(e.target.value)}
+                  placeholder={mode === "signup" ? "At least 6 characters" : "Enter your password"}
+                  required
+                  minLength={6}
+                  className="w-full pl-11 pr-12 py-3 bg-white/5 border border-white/10 rounded-xl text-white placeholder-gray-500 focus:outline-none focus:border-orange-500/50 focus:bg-white/10 transition-all"
+                />
+                <button
+                  type="button"
+                  onClick={() => setShowPassword(!showPassword)}
+                  className="absolute right-4 top-1/2 -translate-y-1/2 text-gray-500 hover:text-gray-300 transition-all"
+                >
+                  {showPassword ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
+                </button>
+              </div>
+            </div>
+
+            <button
+              type="submit"
+              disabled={loading}
+              className="w-full py-4 bg-gradient-to-r from-orange-500 to-red-500 rounded-xl font-bold text-lg hover:shadow-lg hover:shadow-orange-500/25 transition-all disabled:opacity-50"
+            >
+              {loading
+                ? mode === "signin"
+                  ? "Signing in..."
+                  : "Creating account..."
+                : mode === "signin"
+                ? "Sign In"
+                : "Create Account"}
+            </button>
+          </form>
+
+          {/* Toggle Mode */}
+          <div className="mt-6 text-center text-sm text-gray-400">
+            {mode === "signin" ? (
               <>
-                <div className="w-5 h-5 border-2 border-white/30 border-t-white rounded-full animate-spin" />
-                Connecting...
+                Don&apos;t have an account?{" "}
+                <button
+                  onClick={() => {
+                    setMode("signup");
+                    setError("");
+                    setSuccess("");
+                  }}
+                  className="text-orange-400 hover:text-orange-300 font-medium transition-all"
+                >
+                  Sign up
+                </button>
               </>
             ) : (
               <>
-                <svg
-                  className="w-6 h-6"
-                  viewBox="0 0 24 24"
-                  fill="currentColor"
+                Already have an account?{" "}
+                <button
+                  onClick={() => {
+                    setMode("signin");
+                    setError("");
+                    setSuccess("");
+                  }}
+                  className="text-orange-400 hover:text-orange-300 font-medium transition-all"
                 >
-                  <path d="M12 2L2 7v10l10 5 10-5V7L12 2zm0 2.5L19 8v8l-7 3.5L5 16V8l7-3.5z" />
-                </svg>
-                Sign in with Riot
+                  Sign in
+                </button>
               </>
             )}
-          </button>
-
-          {/* Demo Mode */}
-          <div className="mt-4">
-            <button
-              onClick={handleDemoLogin}
-              className="w-full py-3 bg-white/5 hover:bg-white/10 border border-white/10 rounded-xl font-medium transition-all"
-            >
-              Try Demo Mode
-            </button>
-          </div>
-
-          {/* Manual Entry (for development) */}
-          <div className="mt-6 pt-6 border-t border-white/10">
-            <label className="block text-sm text-gray-400 mb-2">
-              Or enter Riot ID manually:
-            </label>
-            <div className="flex gap-2">
-              <input
-                type="text"
-                value={riotId}
-                onChange={(e) => setRiotId(e.target.value)}
-                placeholder="Name#TAG"
-                className="flex-1 px-4 py-3 bg-white/5 border border-white/10 rounded-xl text-white placeholder-gray-500 focus:outline-none focus:border-orange-500/50 transition-all"
-              />
-              <button
-                disabled={!riotId}
-                className="px-6 py-3 bg-white/10 hover:bg-white/15 rounded-xl font-medium transition-all disabled:opacity-50"
-              >
-                Go
-              </button>
-            </div>
           </div>
 
           {/* Privacy Note */}
           <p className="mt-6 text-xs text-gray-500 text-center">
-            We only read your match history. We never access your password or
-            make changes to your account.
+            We only read your match history. We never access your Riot password
+            or make changes to your account.
           </p>
-        </div>
-
-        {/* Help Links */}
-        <div className="mt-6 flex items-center justify-center gap-6 text-sm text-gray-400">
-          <a
-            href="https://developer.riotgames.com"
-            target="_blank"
-            rel="noopener noreferrer"
-            className="flex items-center gap-1 hover:text-white transition-all"
-          >
-            Riot Developer Portal
-            <ExternalLink className="w-3 h-3" />
-          </a>
-          <span>·</span>
-          <Link href="/" className="hover:text-white transition-all">
-            Privacy Policy
-          </Link>
         </div>
       </div>
     </div>

@@ -1,7 +1,8 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import Link from "next/link";
+import { useRouter } from "next/navigation";
 import { DailyCard } from "@/components/DailyCard";
 import {
   RefreshCw,
@@ -10,19 +11,12 @@ import {
   Zap,
   Calendar,
   TrendingUp,
+  User,
 } from "lucide-react";
 import { formatDate } from "@/lib/utils";
+import { createClient } from "@/lib/supabase/client";
 
-// Mock data for demo (replace with real data fetch)
-const MOCK_USER = {
-  id: "demo-user",
-  riotName: "Jinxed4Life",
-  riotTag: "NA1",
-  rank: "Gold II",
-  role: "ADC",
-  subscriptionTier: "free",
-};
-
+// Mock card data (will be replaced with real AI generation later)
 const MOCK_CARD = {
   picks: [
     {
@@ -64,14 +58,59 @@ const MOCK_CARD = {
   },
 };
 
+interface UserData {
+  id: string;
+  email: string;
+  riotName: string | null;
+  riotTag: string | null;
+  rank: string | null;
+  role: string | null;
+  subscriptionTier: string;
+}
+
 export default function HomePage() {
-  const [user] = useState(MOCK_USER);
+  const router = useRouter();
+  const [user, setUser] = useState<UserData | null>(null);
   const [card] = useState(MOCK_CARD);
   const [loading, setLoading] = useState(false);
   const [syncing, setSyncing] = useState(false);
   const [showUpgrade, setShowUpgrade] = useState(false);
+  const [pageLoading, setPageLoading] = useState(true);
 
-  const isPro = user.subscriptionTier === "pro";
+  useEffect(() => {
+    async function loadUser() {
+      const supabase = createClient();
+      const {
+        data: { user: authUser },
+      } = await supabase.auth.getUser();
+
+      if (!authUser) {
+        router.push("/login");
+        return;
+      }
+
+      // For now, use auth data + defaults until Riot is linked
+      setUser({
+        id: authUser.id,
+        email: authUser.email || "",
+        riotName: null,
+        riotTag: null,
+        rank: null,
+        role: null,
+        subscriptionTier: "free",
+      });
+
+      setPageLoading(false);
+    }
+
+    loadUser();
+  }, [router]);
+
+  const isPro = user?.subscriptionTier === "pro";
+  const displayName = user?.riotName || user?.email?.split("@")[0] || "Summoner";
+  const displayTag = user?.riotTag || "NA1";
+  const displayRank = user?.rank || "Unranked";
+  const displayRole = user?.role || "Fill";
 
   const handleRegenerate = async () => {
     if (!isPro) {
@@ -101,7 +140,7 @@ export default function HomePage() {
       const res = await fetch("/api/checkout", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ userId: user.id }),
+        body: JSON.stringify({ userId: user?.id }),
       });
 
       const data = await res.json();
@@ -116,6 +155,26 @@ export default function HomePage() {
       alert("Failed to start checkout. Please try again.");
     }
   };
+
+  const handleSignOut = async () => {
+    await fetch("/api/auth/signout", { method: "POST" });
+    router.push("/login");
+    router.refresh();
+  };
+
+  if (pageLoading) {
+    return (
+      <div className="min-h-screen flex items-center justify-center">
+        <div className="fixed inset-0 bg-gradient-to-br from-slate-950 via-slate-900 to-indigo-950" />
+        <div className="relative z-10 flex flex-col items-center gap-4">
+          <div className="w-12 h-12 bg-gradient-to-br from-orange-500 to-red-600 rounded-xl flex items-center justify-center font-black text-xl animate-pulse">
+            C
+          </div>
+          <div className="text-gray-400">Loading...</div>
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div className="min-h-screen">
@@ -149,11 +208,13 @@ export default function HomePage() {
             <div className="flex items-center gap-3">
               <div className="text-right">
                 <div className="font-semibold">
-                  {user.riotName}
-                  <span className="text-gray-500">#{user.riotTag}</span>
+                  {displayName}
+                  {user?.riotTag && (
+                    <span className="text-gray-500">#{displayTag}</span>
+                  )}
                 </div>
                 <div className="text-xs text-gray-400 flex items-center gap-2">
-                  <span>{user.rank}</span>
+                  <span>{displayRank}</span>
                   <span>·</span>
                   <span className={isPro ? "text-orange-400" : "text-gray-500"}>
                     {isPro ? "PRO" : "FREE"}
@@ -165,15 +226,18 @@ export default function HomePage() {
                 <button className="w-10 h-10 bg-white/5 hover:bg-white/10 rounded-xl flex items-center justify-center transition-all">
                   <Settings className="w-5 h-5" />
                 </button>
-                <div className="absolute right-0 top-full mt-2 w-48 bg-slate-800 border border-white/10 rounded-xl shadow-xl opacity-0 invisible group-hover:opacity-100 group-hover:visible transition-all">
+                <div className="absolute right-0 top-full mt-2 w-48 bg-slate-800 border border-white/10 rounded-xl shadow-xl opacity-0 invisible group-hover:opacity-100 group-hover:visible transition-all z-50">
                   <Link
                     href="/settings"
-                    className="flex items-center gap-3 px-4 py-3 hover:bg-white/5 transition-all"
+                    className="flex items-center gap-3 px-4 py-3 hover:bg-white/5 transition-all rounded-t-xl"
                   >
                     <Settings className="w-4 h-4" />
                     Settings
                   </Link>
-                  <button className="w-full flex items-center gap-3 px-4 py-3 hover:bg-white/5 transition-all text-red-400">
+                  <button
+                    onClick={handleSignOut}
+                    className="w-full flex items-center gap-3 px-4 py-3 hover:bg-white/5 transition-all text-red-400 rounded-b-xl"
+                  >
                     <LogOut className="w-4 h-4" />
                     Sign Out
                   </button>
@@ -186,6 +250,27 @@ export default function HomePage() {
 
       {/* Main Content */}
       <main className="relative z-10 max-w-6xl mx-auto px-6 py-8">
+        {/* Riot Account Link Banner */}
+        {!user?.riotName && (
+          <div className="mb-6 p-4 bg-orange-500/10 border border-orange-500/20 rounded-xl flex items-center justify-between">
+            <div className="flex items-center gap-3">
+              <User className="w-5 h-5 text-orange-400" />
+              <div>
+                <div className="font-semibold text-sm">Link your Riot account</div>
+                <div className="text-xs text-gray-400">
+                  Connect your League account to get personalized recommendations
+                </div>
+              </div>
+            </div>
+            <Link
+              href="/settings"
+              className="px-4 py-2 bg-orange-500/20 hover:bg-orange-500/30 border border-orange-500/30 rounded-lg text-sm font-medium text-orange-400 transition-all"
+            >
+              Link Account
+            </Link>
+          </div>
+        )}
+
         <div className="grid lg:grid-cols-3 gap-8">
           {/* Main Card Column */}
           <div className="lg:col-span-2 space-y-6">
@@ -198,10 +283,10 @@ export default function HomePage() {
 
             <DailyCard
               data={card}
-              userName={user.riotName}
-              userTag={user.riotTag}
-              rank={user.rank}
-              role={user.role}
+              userName={displayName}
+              userTag={displayTag}
+              rank={displayRank}
+              role={displayRole}
               isPro={isPro}
               onRegenerate={handleRegenerate}
               isRegenerating={loading}
@@ -255,19 +340,19 @@ export default function HomePage() {
               <div className="space-y-4">
                 <div className="flex justify-between items-center">
                   <span className="text-gray-400">Current Rank</span>
-                  <span className="font-bold">{user.rank}</span>
+                  <span className="font-bold">{displayRank}</span>
                 </div>
                 <div className="flex justify-between items-center">
                   <span className="text-gray-400">Main Role</span>
-                  <span className="font-bold">{user.role}</span>
+                  <span className="font-bold">{displayRole}</span>
                 </div>
                 <div className="flex justify-between items-center">
-                  <span className="text-gray-400">Games Analyzed</span>
-                  <span className="font-bold">47</span>
-                </div>
-                <div className="flex justify-between items-center">
-                  <span className="text-gray-400">Overall WR</span>
-                  <span className="font-bold text-emerald-400">54%</span>
+                  <span className="text-gray-400">Account</span>
+                  <span className="font-bold text-sm">
+                    {user?.riotName
+                      ? `${user.riotName}#${user.riotTag}`
+                      : "Not linked"}
+                  </span>
                 </div>
               </div>
             </div>
@@ -278,34 +363,11 @@ export default function HomePage() {
                 Recent Cards
               </h3>
 
-              <div className="space-y-3">
-                {[
-                  { date: "Yesterday", pick: "Jinx", result: "W", lp: "+18" },
-                  { date: "2 days ago", pick: "Kai'Sa", result: "W", lp: "+16" },
-                  { date: "3 days ago", pick: "MF", result: "L", lp: "-14" },
-                ].map((entry, i) => (
-                  <div
-                    key={i}
-                    className="flex items-center justify-between py-2 border-b border-white/5 last:border-0"
-                  >
-                    <div>
-                      <div className="text-sm font-medium">{entry.date}</div>
-                      <div className="text-xs text-gray-400">Played {entry.pick}</div>
-                    </div>
-                    <div
-                      className={`text-sm font-bold ${
-                        entry.result === "W" ? "text-emerald-400" : "text-red-400"
-                      }`}
-                    >
-                      {entry.result} ({entry.lp})
-                    </div>
-                  </div>
-                ))}
+              <div className="text-sm text-gray-400 text-center py-4">
+                {user?.riotName
+                  ? "Your card history will appear here."
+                  : "Link your Riot account to start generating cards."}
               </div>
-
-              <button className="w-full mt-4 py-2 text-sm text-gray-400 hover:text-white transition-all">
-                View Full History →
-              </button>
             </div>
           </div>
         </div>
@@ -313,8 +375,14 @@ export default function HomePage() {
 
       {/* Upgrade Modal */}
       {showUpgrade && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/80 backdrop-blur-sm">
-          <div className="bg-slate-800 border border-white/10 rounded-2xl p-8 max-w-md mx-4 animate-fade-in">
+        <div
+          className="fixed inset-0 z-50 flex items-center justify-center bg-black/80 backdrop-blur-sm"
+          onClick={() => setShowUpgrade(false)}
+        >
+          <div
+            className="bg-slate-800 border border-white/10 rounded-2xl p-8 max-w-md mx-4 animate-fade-in"
+            onClick={(e) => e.stopPropagation()}
+          >
             <div className="text-center">
               <div className="w-16 h-16 bg-orange-500/20 rounded-2xl flex items-center justify-center mx-auto mb-4">
                 <Zap className="w-8 h-8 text-orange-400" />
@@ -326,7 +394,8 @@ export default function HomePage() {
 
               <div className="bg-white/5 rounded-xl p-4 mb-6">
                 <div className="text-3xl font-black">
-                  $9<span className="text-lg text-gray-400 font-normal">/mo</span>
+                  $9
+                  <span className="text-lg text-gray-400 font-normal">/mo</span>
                 </div>
               </div>
 
